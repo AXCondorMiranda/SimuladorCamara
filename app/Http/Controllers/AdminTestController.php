@@ -7,6 +7,7 @@ use App\Models\Question;
 use App\Models\TestType;
 use App\Models\Test;
 use Illuminate\Http\Request;
+use App\Http\Requests\StoreTestRequest;
 use Illuminate\Support\Facades\Log;
 
 class AdminTestController extends Controller
@@ -16,9 +17,10 @@ class AdminTestController extends Controller
      */
     public function index()
     {
-        $tests = Test::where('state', true)->where('is_practice', false)->get();
+        $tests = Test::with('test_type')->where('state', true)->where('is_practice', false)->get();
         return view('admin.tests.index', compact('tests'));
     }
+
 
     /**
      * Mostrar la lista de prácticas.
@@ -50,25 +52,19 @@ class AdminTestController extends Controller
     /**
      * Guardar un nuevo examen o práctica en la base de datos.
      */
-    public function store(Request $request)
+    public function store(StoreTestRequest $request)
     {
-        $validatedData = $request->validate([
-            'test_type_id' => 'required',
-            'name' => 'required|string',
-            'quantity' => 'required|integer',
-            'is_practice' => 'nullable|boolean',
-        ]);
+        try {
+            $test = Test::create($request->validated());
 
-        $test = new Test();
-        $test->test_type_id = $validatedData['test_type_id'];
-        $test->name = $validatedData['name'];
-        $test->quantity = $validatedData['quantity'];
-        $test->is_practice = $request->has('is_practice');
-        $test->save();
-
-        $redirectRoute = $test->is_practice ? 'admin.practices.index' : 'admin.tests.index';
-        return redirect()->route($redirectRoute)->with('success', 'El examen/práctica se ha creado correctamente.');
+            $redirectRoute = $test->is_practice ? 'admin.practices.index' : 'admin.tests.index';
+            return redirect()->route($redirectRoute)->with('success', 'El examen/práctica se ha creado correctamente.');
+        } catch (\Exception $e) {
+            Log::error('Error al crear el examen/práctica: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Hubo un problema al crear el examen/práctica. Por favor, inténtelo de nuevo.');
+        }
     }
+
 
     /**
      * Mostrar el formulario para editar un examen existente.
@@ -78,7 +74,7 @@ class AdminTestController extends Controller
         $test = Test::findOrFail($id);
         $test_types = TestType::all();
         $questions = Question::all();
-        return view('admin.tests.edit', compact('test', 'test_types','questions'));
+        return view('admin.tests.edit', compact('test', 'test_types', 'questions'));
     }
 
     /**
@@ -121,7 +117,10 @@ class AdminTestController extends Controller
      */
     public function buscarExamen($id)
     {
-        $test = Test::with('questions.alternatives')->findOrFail($id);
+        $test = Test::with(['questions' => function ($query) {
+            $query->with('alternatives')->orderBy('created_at');
+        }])->findOrFail($id);
+
         return response()->json(['data' => $test]);
     }
 }
