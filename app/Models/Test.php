@@ -23,7 +23,7 @@ class Test extends Model
 
     public function questions()
     {
-        return $this->hasMany(Question::class);
+        return $this->belongsToMany(Question::class, 'question_test', 'test_id', 'question_id');
     }
 
     public function results()
@@ -32,7 +32,7 @@ class Test extends Model
     }
     public function testSessions()
     {
-        return $this->hasMany(TestSession::class);
+        return $this->hasMany(TestSession::class, 'test_id', 'id');
     }
 
     public function respuestasUsuarios()

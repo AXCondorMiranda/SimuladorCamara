@@ -8,12 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 class TestSession extends Model
 {
     use HasFactory;
+    protected $table = 'test_sessions';
 
-    protected $fillable = ['user_id', 'test_id', 'session_id'];
+    protected $fillable = ['user_id', 'test_id','score', 'session_id'];
 
     public function test()
     {
-        return $this->belongsTo(Test::class);
+        return $this->belongsTo(Test::class, 'test_id', 'id');
     }
     public function user()
     {
@@ -22,6 +23,6 @@ class TestSession extends Model
 
     public function respuestasUsuarios()
     {
-        return $this->hasMany(RespuestaUsuario::class);
+        return $this->hasMany(RespuestaUsuario::class, 'test_session_id', 'session_id');
     }
 }

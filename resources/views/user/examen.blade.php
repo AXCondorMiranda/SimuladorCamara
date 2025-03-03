@@ -3,8 +3,7 @@
 @section('content')
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
-<body data-test-id="{{ session('test_session_id') }}">
-
+<body data-test-id="{{ session('test_id', 'no-id') }}" data-session-id="{{ session('test_session_id', 'no-session') }}">
     <div class="row m-2">
         <div class="col-md-2 my-3">
             <div class="card">
@@ -114,9 +113,35 @@
         }
     });
 </script>
-
 <script>
-    let listaPreguntas = @json($listaPreguntas);
+    document.addEventListener("DOMContentLoaded", function() {
+        let testId = document.body.getAttribute("data-test-id");
+        let testSessionId = document.body.getAttribute("data-session-id");
+
+        console.log("📌 Test ID desde HTML:", testId);
+        console.log("Test Session ID obtenido:", testSessionId);
+
+        if (!testId) {
+            console.error("❌ testId no está presente en el HTML");
+        }
+
+    });
+</script>
+<script>
+    let resultados = @json($resultados ?? []);
+    console.log("📌 Datos de resultados:", resultados);
+</script>
+<script>
+     let listaPreguntas = @json($preguntas ?? []);
+     console.log("📌 Preguntas recibidas en la vista:", listaPreguntas);
+
+    if (!Array.isArray(listaPreguntas) || listaPreguntas.length === 0) {
+        console.error("❌ No se recibieron preguntas en la vista. Verifica la base de datos.");
+    }
+    listaPreguntas.forEach(pregunta => {
+        console.log("📌 Pregunta cargada:", pregunta.descripcion);
+    });
+    
     let test = @json($test);
 </script>
 

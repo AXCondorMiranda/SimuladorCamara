@@ -36,7 +36,7 @@
                             <h3>{{ auth()->user()->name }}</h3>
                             <h4>{{ auth()->user()->email }}</h4>
                             <div class="puntaje_container">
-                                <a href="{{route('historial.puntajes')}}">
+                                <a href="{{route('puntajes')}}">
                                     <button id="puntaje">
                                         <h2>Puntajes</h2>
                                     </button>

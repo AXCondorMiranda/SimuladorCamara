@@ -9,6 +9,7 @@ use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\ExamenController;
 use App\Http\Controllers\PracticaController;
 use App\Http\Controllers\ResultadoController;
+use App\Http\Controllers\UserTestController;
 
 // Rutas de autenticación
 Route::get('/login', [SessionsController::class, 'create'])->name('login.index');
@@ -18,7 +19,7 @@ Route::get('/logout', [SessionsController::class, 'logout'])->name('logout');
 // Grupo de rutas protegidas
 Route::middleware(['auth'])->group(function () {
     Route::get('/', function () {
-        return redirect()->route('login.index');
+        return redirect()->route('inicio');
     });
 
     Route::get('/seleccionar-tipo', function () {
@@ -32,42 +33,43 @@ Route::middleware(['auth'])->group(function () {
             return view('user.home');
         })->name('inicio');
 
-        // Exámenes
-        Route::get('/examen/iniciar', [ExamenController::class, 'iniciarExamen'])->name('examen.iniciar');
-        Route::get('/examen/resultado/{test_id}', [ResultadoController::class, 'resultado'])->name('examen.resultado');
+        // 📌 EXÁMENES Y PRÁCTICAS - USAN LA MISMA PLANTILLA
+        Route::post('/generar-practica', [PracticaController::class, 'generarPractica'])->name('generar.practica');
+        Route::get('/iniciar-examen', [UserTestController::class, 'iniciarExamen'])->name('user.iniciar.examen');
+
+        // 📌 Prácticas por tema
+        Route::get('/practica-tema', [PracticaController::class, 'practicaTema'])->name('practica.tema');
+
+        // 📌 Guardar respuestas después de la práctica o el examen
         Route::post('/guardar-respuestas', [ExamenController::class, 'guardarRespuestas'])->name('guardar.respuestas');
 
-        // Prácticas y Simulacros
-        Route::post('/practica', [PracticaController::class, 'generarPractica'])->name('generar.practica');
-        Route::get('/practica', [PracticaController::class, 'indexPractica'])->name('practica.index');
-        Route::get('/practica-tema', [PracticaController::class, 'practicaTema'])->name('practica.tema');
-        Route::post('/simulacros', [PracticaController::class, 'generarSimulacro'])->name('generar.simulacro');
+        // 📌 Mostrar resultado del examen
+        Route::get('/examen/resultado/{test_session_id}', [ResultadoController::class, 'mostrarResultados'])->name('examen.resultado');
 
-        // Otras vistas de usuario
-        Route::get('/temario', function () {
-            return view('user.temario');
-        })->name('temario');
-        Route::get('/simulacros', function () {
-            return view('user.simulacros');
-        })->name('simulacros');
-        Route::get('/puntajes', [ResultadoController::class, 'answersHistory'])->name('historial.puntajes');
+        // 📌 Otras vistas de usuario
+        Route::get('/puntajes', [ResultadoController::class, 'answersHistory'])->name('puntajes');
+        Route::view('/temario', 'user.temario')->name('temario');
+        Route::view('/simulacros', 'user.simulacros')->name('simulacros');
+        Route::get('/examen/{test_id}', [UserTestController::class, 'mostrarExamen'])->name('user.examen');
+
     });
 
-    // Rutas de administrador
-    Route::middleware(['auth', 'admin'])->group(function () {
-        Route::get('/admin/examenes', [AdminTestController::class, 'index'])->name('examen.index');
-        Route::get('/admin/practicas', [AdminTestController::class, 'indexPractica'])->name('admin.practica.index');
-        Route::get('/admin/practicas/create', [AdminTestController::class, 'createPractica'])->name('practica.create');
+    // 📌 Rutas de administrador
+    Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/examenes', [AdminTestController::class, 'index'])->name('examen.index');
+        Route::get('/practicas', [AdminTestController::class, 'indexPractica'])->name('practica.index');
+        Route::get('/practicas/create', [AdminTestController::class, 'createPractica'])->name('practica.create');
+
         Route::get('/preguntas', [QuestionController::class, 'index'])->name('preguntas.index');
-        Route::get('/admin/examenes/create', [AdminTestController::class, 'create'])->name('examen.create');
-        Route::get('/admin/examenes/buscar/{id}', [AdminTestController::class, 'buscarExamen'])->name('buscar.examen');
-        Route::get('/admin/examenes/{id}/edit', [AdminTestController::class, 'edit'])->name('examen.edit');
-        Route::post('/admin/examenes', [AdminTestController::class, 'store'])->name('examen.store');
-        Route::put('/admin/examenes/{id}', [AdminTestController::class, 'update'])->name('examen.update');
-        Route::delete('/admin/examenes/{id}', [AdminTestController::class, 'destroy'])->name('examen.destroy');
+        Route::get('/examenes/create', [AdminTestController::class, 'create'])->name('examen.create');
+        Route::get('/examenes/buscar/{id}', [AdminTestController::class, 'buscarExamen'])->name('buscar.examen');
+        Route::get('/examenes/{id}/edit', [AdminTestController::class, 'edit'])->name('examen.edit');
+        Route::post('/examenes', [AdminTestController::class, 'store'])->name('examen.store');
+        Route::put('/examenes/{id}', [AdminTestController::class, 'update'])->name('examen.update');
+        Route::delete('/examenes/{id}', [AdminTestController::class, 'destroy'])->name('examen.destroy');
     });
 
-    // Otras rutas de administrador
+    // 📌 Otras rutas de administrador
     Route::get('/register', [RegisterController::class, 'create'])->name('admin.register.index');
     Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
     Route::resource('/usuario', UserController::class);

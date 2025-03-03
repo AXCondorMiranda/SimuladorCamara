@@ -1,42 +1,45 @@
-@extends('layouts.app')
+@extends('layouts.simple')
 
 @section('content')
 
-    <div class="portada">
-        <div class="port_1">
-            <div class="port_1_container">
-                <h1>Puntajes</h1><br>
-                <h2>Revisa tus respuestas</h2>
-            </div>
-            <div class="container_table">
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                        <tr>
-                            <th style="width: 50%">Examen</th>
-                            <th>Total preguntas</th>
-                            <th>Total correctas</th>
-                            <th>Total incorrectas</th>
-                            <th>Puntaje</th>
-                            <th>Fecha de examen</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        @foreach($result as $res)
-                            <tr>
-                                <td style="width: 50%">{{ $res->test->name }}</td>
-                                <td>{{ $res->total_marked }}</td>
-                                <td>{{ $res->total_correct }}</td>
-                                <td>{{ $res->total_incorrect }}</td>
-                                <td>{{ $res->total_correct*1}}</td>
-                                <td>{{ $res->duration}}</td>
-                            </tr>
-                        @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+<body>
+    <div class="container">
+        <h2>Historial de Exámenes</h2>
+
+        @if ($historialExamenes->isEmpty())
+        <div class="alert alert-warning">No tienes exámenes registrados.</div>
+        @else
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Fecha</th>
+                    <th>Test</th>
+                    <th>Puntaje</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($historialExamenes as $index => $examen)
+                <tr>
+                    <td>{{ $index + 1 }}</td>
+                    <td>{{ $examen['fecha'] }}</td>  {{-- Acceder como array --}}
+                    <td>{{ $examen['test'] }}</td>  {{-- Acceder como array --}}
+                    <td>{{ $examen['puntaje'] }}</td>  {{-- Acceder como array --}}
+                    <td>
+                    <a href="{{ url('/examen/resultado', ['test_session_id' => $examen['session_id']]) }}" class="btn btn-info btn-sm">
+                            Ver Detalle
+                        </a>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+        @endif
+
+        <div class="text-center mt-4">
+            <a href="{{ route('inicio') }}" class="btn btn-primary">Regresar a Inicio</a>
         </div>
     </div>
-
+</body>
 @endsection

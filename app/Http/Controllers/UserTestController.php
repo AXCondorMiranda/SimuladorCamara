@@ -5,120 +5,92 @@ namespace App\Http\Controllers;
 use App\Models\Alternative;
 use App\Models\Question;
 use App\Models\Test;
-use App\Models\Result;
-use App\Models\ResultDetail;
+use App\Models\TestSession;
+use App\Models\RespuestaUsuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
 
 class UserTestController extends Controller
 {
     /**
-     * Generar un examen basado en el tipo de usuario.
+     * Genera un examen con preguntas de múltiples temas.
      */
     public function iniciarExamen()
     {
         try {
-            Log::info('Método iniciarExamen llamado', ['user_id' => auth()->user()->id]);
+            Log::info('📝 Iniciando examen para usuario', ['user_id' => auth()->id()]);
 
             $user = auth()->user();
-            $tipo = $user->affiliate_type_id;
 
-            if (!$tipo) {
-                Log::warning('Tipo de usuario no definido', ['user_id' => $user->id]);
-                return redirect()->route('seleccionar.tipo')->with('error', 'Por favor selecciona tu tipo de usuario.');
-            }
-
-            Log::info('Usuario con tipo válido', ['tipo' => $tipo]);
-
-            // Obtener todos los exámenes activos de este tipo de usuario
-            $tests = Test::whereIn('test_type_id', [$tipo])
+            // Obtener todas las prácticas activas
+            $practicas = Test::where('is_practice', true)
                 ->where('state', true)
-                ->where('is_practice', true) // Aquí corregimos para incluir solo exámenes válidos
+                ->has('questions')
                 ->get();
 
-            Log::info('Exámenes obtenidos para este usuario', ['tests' => $tests->toArray()]);
+            Log::info('📌 Prácticas disponibles para el examen', [
+                'total_practicas' => $practicas->count(),
+                'practicas' => $practicas->pluck('name', 'id')
+            ]);
 
-            if ($tests->isEmpty()) {
-                Log::warning('No se encontraron exámenes para este tipo de usuario', ['test_type_id' => $tipo]);
-                return redirect()->route('inicio')->with('error', 'No hay exámenes disponibles.');
+            if ($practicas->isEmpty()) {
+                Log::warning('⚠️ No hay prácticas disponibles.');
+                return redirect()->route('inicio')->with('error', 'No hay prácticas disponibles.');
             }
 
-            Log::info('Exámenes encontrados', ['count' => $tests->count()]);
-
-            // Obtener preguntas de todos los exámenes encontrados
+            // Calcular cuántas preguntas se tomarán de cada práctica
+            $totalPreguntas = 100;
             $preguntasSeleccionadas = collect();
-            $cantidadTotal = 100;
+            $preguntasPorPractica = (int) ($totalPreguntas / max($practicas->count(), 1));
 
-            foreach ($tests as $test) {
-                $totalPreguntas = $test->questions->count();
-                Log::info("Preguntas disponibles en test_id {$test->id}: {$totalPreguntas}");
+            foreach ($practicas as $practica) {
+                $preguntas = $practica->questions()
+                    ->inRandomOrder()
+                    ->take($preguntasPorPractica)
+                    ->get();
 
-                if ($totalPreguntas > 0) {
-                    $preguntasPorTest = $test->questions()
-                        ->inRandomOrder()
-                        ->take(floor($cantidadTotal / max(1, $tests->count()))) // Evitar división por 0
-                        ->get();
+                $preguntasSeleccionadas = $preguntasSeleccionadas->merge($preguntas);
 
-                    $preguntasSeleccionadas = $preguntasSeleccionadas->merge($preguntasPorTest);
-                }
-            }
-            Log::info('Preguntas seleccionadas antes de creación', ['count' => $preguntasSeleccionadas->count()]);
-            if ($preguntasSeleccionadas->isEmpty()) {
-                Log::error('No se seleccionaron preguntas para el examen generado');
-                return redirect()->route('inicio')->with('error', 'No hay preguntas disponibles.');
-            }
-            // Crear el simulacro aleatorio como un nuevo Test
-            $simulacro = Test::create([
-                'test_type_id' => 5, // Simulacros Aleatorios
-                'name' => "Simulacro Aleatorio - " . now()->format('d-m-Y H:i'),
-                'quantity' => $preguntasSeleccionadas->count(),
-                'is_practice' => false,
-                'state' => true,
-            ]);
-
-            Log::info('Simulacro creado', ['test_id' => $simulacro->id]);
-
-            // Registrar el examen en la tabla results
-            $result = Result::create([
-                'user_id' => $user->id,
-                'test_id' => $simulacro->id,
-                'questions_total' => $preguntasSeleccionadas->count(),
-                'duration' => now(),
-                'total_marked' => 0,
-                'total_correct' => 0,
-                'total_incorrect' => 0,
-            ]);
-
-            Log::info('Examen registrado en la tabla results', ['result_id' => $result->id]);
-
-            // Guardar preguntas en result_details
-            foreach ($preguntasSeleccionadas as $pregunta) {
-                ResultDetail::create([
-                    'result_id' => $result->id,
-                    'question_id' => $pregunta->id,
-                    'user_answers' => null,
+                Log::info('📌 Preguntas seleccionadas de la práctica ' . $practica->name, [
+                    'practica' => $practica->name,
+                    'preguntas_seleccionadas' => $preguntas->pluck('description', 'id')
                 ]);
             }
 
-            Log::info('Detalles del examen creados en result_details');
-            Log::info('Preguntas enviadas a la vista', ['preguntas' => $preguntasSeleccionadas->toArray()]);
-            // Redirigir al examen
-            return view('user.examen', [
-                'test' => $tests->first(),
-                'listaPreguntas' => $preguntasSeleccionadas->map(function ($pregunta) {
-                    return [
-                        'id' => $pregunta->id,
-                        'test_id' => $pregunta->test_id,
-                        'description' => $pregunta->description,
-                        'state' => $pregunta->state,
-                        'respuestas' => $pregunta->alternatives, // Asegúrate de incluir las respuestas
-                    ];
-                }),
+            // Si hay menos de 100 preguntas, usar todas las disponibles
+            if ($preguntasSeleccionadas->count() < $totalPreguntas) {
+                Log::warning('⚠️ Preguntas insuficientes: ' . $preguntasSeleccionadas->count() . ' preguntas disponibles.');
+            }
+
+            if ($preguntasSeleccionadas->isEmpty()) {
+                Log::error('❌ No se seleccionaron preguntas');
+                return redirect()->route('inicio')->with('error', 'No hay preguntas disponibles.');
+            }
+
+            // Crear una nueva sesión de examen
+            $testSession = TestSession::create([
+                'user_id' => $user->id,
+                'test_id' => $practicas->first()->id, // Tomar una de las prácticas como referencia
+                'session_id' => uniqid(),
             ]);
 
+            // Guardar en sesión
+            session()->put('test_id', $testSession->test_id);
+            session()->put('test_session_id', $testSession->session_id);
+            session()->put('preguntas_examen', $preguntasSeleccionadas->pluck('id')->toArray());
+            session()->save();
+
+            session()->save();
+
+            Log::info('✅ Examen generado correctamente', [
+                'test_session_id' => $testSession->session_id,
+                'total_preguntas' => $preguntasSeleccionadas->count()
+            ]);
+
+            return redirect()->route('user.examen', ['test_id' => session('test_id')]);
         } catch (\Exception $e) {
-            Log::error('Error en iniciarExamen', [
-                'user_id' => auth()->user()->id ?? 'no-auth',
+            Log::error('❌ Error en iniciarExamen', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -129,73 +101,105 @@ class UserTestController extends Controller
 
 
 
-
-
     /**
-     * Mostrar las prácticas disponibles agrupadas por tema.
+     * Genera una práctica personalizada con preguntas aleatorias de un tema.
      */
-    public function practicaTema()
+
+
+    public function seleccionarPractica()
+    {
+        $tests = Test::where('state', true)->get(); // Filtrar solo los activos
+        return view('seleccionar-practica', compact('tests'));
+    }
+
+
+    public function mostrarExamen($test_id)
     {
         try {
-            // Obtener las prácticas activas agrupadas por tema
-            $tests = Test::where('state', true)
-                ->where('is_practice', true) // Solo prácticas
-                ->has('questions') // Validar que tenga preguntas asociadas
-                ->get();
+            $userId = auth()->id();
+            $sessionTestId = session('test_session_id');
 
-            return view('user.seleccionar-practica', compact('tests'));
+            Log::info('📌 Mostrando examen/práctica', [
+                'test_id' => $test_id,
+                'user_id' => $userId,
+                'session' => $sessionTestId
+            ]);
+
+            // 🔹 Recuperar preguntas seleccionadas desde la sesión
+            $preguntasSeleccionadas = session('preguntas_examen', []);
+
+            if (empty($preguntasSeleccionadas)) {
+                Log::error('❌ No se encontraron preguntas en la sesión.');
+                return redirect()->route('inicio')->with('error', 'No hay preguntas disponibles para este examen.');
+            }
+
+            // 🔹 Asegurar que solo sean IDs numéricos válidos
+            $preguntasIds = array_filter($preguntasSeleccionadas, 'is_numeric');
+
+            if (empty($preguntasIds)) {
+                Log::error('❌ Los datos en la sesión no contienen IDs válidos.');
+                return redirect()->route('inicio')->with('error', 'Error al recuperar las preguntas del examen.');
+            }
+
+            // 🔹 Obtener las preguntas de la BD con sus alternativas
+            $preguntas = Question::whereIn('id', $preguntasIds)->with('alternatives')->get();
+
+            if ($preguntas->isEmpty()) {
+                Log::error('❌ No se encontraron preguntas en la base de datos.', ['preguntas_seleccionadas' => $preguntasSeleccionadas]);
+                return redirect()->route('inicio')->with('error', 'No se encontraron preguntas disponibles.');
+            }
+
+            Log::info('📌 Preguntas enviadas a la vista', [
+                'total_preguntas' => $preguntas->count(),
+                'preguntas' => $preguntas->pluck('description', 'id')
+            ]);
+
+            return view('user.examen', [
+                'preguntas' => $preguntas,
+                'test' => Test::find($test_id)
+            ]);
         } catch (\Exception $e) {
-            Log::error('Error al cargar las prácticas por tema: ' . $e->getMessage());
-            return redirect()->route('inicio')->with('error', 'Hubo un problema al cargar las prácticas por tema.');
+            Log::error('❌ Error en mostrarExamen', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return redirect()->route('inicio')->with('error', 'Ocurrió un error al cargar el examen.');
         }
     }
 
 
-
     /**
-     * Generar una práctica personalizada basada en las preguntas de un test.
+     * Guarda las respuestas del usuario.
      */
-    public function generarPractica(Request $request)
-{
-    $validatedData = $request->validate([
-        'test_id' => 'required|exists:tests,id',
-        'quantity' => 'required|integer|min:1',
-    ]);
+    public function guardarRespuestas(Request $request)
+    {
+        Log::info('📩 Datos recibidos en guardarRespuestas:', $request->all());
 
-    $test = Test::findOrFail($validatedData['test_id']);
+        $validatedData = $request->validate([
+            'respuestasExamen' => 'required|array',
+            'test_id' => 'required|exists:tests,id',
+            'test_session_id' => 'required|exists:test_sessions,session_id',
+        ]);
 
-    // Verificar que el test tenga preguntas
-    $questions = $test->questions;
-    if ($questions->isEmpty()) {
-        return redirect()->route('practica.index')->with('error', 'El test seleccionado no tiene preguntas disponibles.');
+        Log::info('✅ Validación pasada');
+
+        foreach ($validatedData['respuestasExamen'] as $preguntaId => $respuesta) {
+            if (!is_numeric($preguntaId)) {
+                Log::warning("⚠ Se encontró una clave inesperada en respuestasExamen: $preguntaId");
+                continue; // Ignorar elementos incorrectos
+            }
+
+            RespuestaUsuario::create([
+                'test_session_id' => $validatedData['test_session_id'],
+                'test_id' => $validatedData['test_id'],
+                'question_id' => $preguntaId,
+                'respuesta' => $respuesta['respuesta'],
+                'es_correcta' => $respuesta['correcta'],
+                'user_id' => auth()->id(),
+            ]);
+        }
+
+        return response()->json(['success' => 'Respuestas guardadas correctamente.']);
     }
-
-    // Ajustar la cantidad solicitada si excede el total de preguntas
-    $cantidadSolicitada = $validatedData['quantity'];
-    if ($questions->count() < $cantidadSolicitada) {
-        $cantidadSolicitada = $questions->count();
-    }
-
-    // Generar lista de preguntas en el mismo formato que iniciarExamen()
-    $listaPreguntas = $questions
-        ->shuffle()
-        ->take($cantidadSolicitada)
-        ->map(function ($question) {
-            $respuestas = $question->alternatives->map(function ($alternative) {
-                return [
-                    'description' => $alternative->description, // Asegurar que use "description"
-                    'id' => $alternative->id,
-                    'is_correct' => $alternative->is_correct,
-                ];
-            });
-
-            return [
-                'id' => $question->id,
-                'description' => $question->description, // Asegurar que use "description"
-                'respuestas' => $respuestas->toArray(),
-            ];
-        })->toArray();
-
-    return view('user.examen', compact('test', 'listaPreguntas'));
-}
 }

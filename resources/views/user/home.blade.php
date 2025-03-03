@@ -2,6 +2,8 @@
 
 @section('content')
 
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
 <div class="portada">
     <div class="port_1">
         <div class="port_1_container">
@@ -22,7 +24,7 @@
         if (!confirm("¿Estás han seguro de que deseas iniciar el examen?")) {
             event.preventDefault();
         } else {
-            window.location.href = "{{ route('examen.iniciar') }}";
+            window.location.href = "{{ route('user.iniciar.examen') }}";
         }
     });
 </script>
